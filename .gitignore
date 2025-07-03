@@ -1,0 +1,7 @@
+node_modules
+.env
+
+echo "../.vscode/" >> .gitignore
+echo "../login/" >> .gitignore
+echo "../ora-server/" >> .gitignore
+echo "../start_servers.bat" >> .gitignore
