@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import './MemoriesCreator.css';
 import StoryPreference from './StoryPreference';
 
-const MemoriesCreator = ({ onLogout }) => {
+const MemoriesCreator = () => {
   const [showStoryPreference, setShowStoryPreference] = useState(false);
 
   const handleAddClick = () => {
@@ -21,9 +21,6 @@ const MemoriesCreator = ({ onLogout }) => {
     <div className="desktop-frame">
       <div className="header-bar">
         <h1 className="title">Create your Memories</h1>
-        <button className="logout-button" onClick={onLogout}>
-          Logout
-        </button>
       </div>
       
       <div className="buttons-container">

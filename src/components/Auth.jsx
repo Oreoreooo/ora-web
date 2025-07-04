@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './Auth.css';
 
-const Auth = ({ onAuthSuccess }) => {
-  const [isLogin, setIsLogin] = useState(true);
+const Auth = ({ mode = 'login' }) => {
+  const [isLogin, setIsLogin] = useState(mode === 'login');
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -13,6 +13,11 @@ const Auth = ({ onAuthSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [captchaSent, setCaptchaSent] = useState(false);
+
+  // 根据mode参数设置初始状态
+  useEffect(() => {
+    setIsLogin(mode === 'login');
+  }, [mode]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -71,14 +76,16 @@ const Auth = ({ onAuthSuccess }) => {
       if (response.data.success) {
         if (isLogin) {
           // Store token and user info
-          localStorage.setItem('token', response.data.token);
+          localStorage.setItem('access_token', response.data.token || response.data.access_token);
           localStorage.setItem('user', JSON.stringify(response.data.user));
-          onAuthSuccess(response.data.token);
+          // 登录成功后跳转到首页或之前的页面
+          window.location.href = '/';
         } else {
-          // Registration successful, switch to login
-          setIsLogin(true);
-          setFormData({ email: formData.email, password: '', username: '', captcha: '' });
-          alert('Registration successful! Please login.');
+          // Registration successful, store tokens and redirect
+          localStorage.setItem('access_token', response.data.access_token);
+          localStorage.setItem('user', JSON.stringify(response.data.user));
+          // 注册成功后跳转到首页
+          window.location.href = '/';
         }
       }
     } catch (err) {
@@ -161,19 +168,13 @@ const Auth = ({ onAuthSuccess }) => {
 
         <div className="auth-switch">
           <span>
-            {isLogin ? "Don't have an account? " : "Already have an account? "}
-            <button 
-              type="button" 
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setError('');
-                setFormData({ email: '', password: '', username: '', captcha: '' });
-                setCaptchaSent(false);
-              }}
+            {isLogin ? "还没有账户？ " : "已有账户？ "}
+            <a 
+              href={isLogin ? '/register' : '/login'}
               className="switch-btn"
             >
-              {isLogin ? 'Sign Up' : 'Sign In'}
-            </button>
+              {isLogin ? '注册' : '登录'}
+            </a>
           </span>
         </div>
       </div>
