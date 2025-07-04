@@ -30,6 +30,7 @@ class ASRService:
                 vad_model="fsmn-vad",
                 vad_kwargs={"max_single_segment_time": 30000},
                 device="cuda:0" if Config.USE_CUDA else "cpu",
+                disable_update=True  # 禁用自动更新检查
             )
             
             # Audio parameters

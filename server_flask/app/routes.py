@@ -5,6 +5,8 @@ from app.blueprints.services_asr import ASRService
 from app.extension import db
 from app.models import UserModel, Conversation, ChatMessage
 from io import BytesIO
+import requests
+from app.config import Config
 
 bp = Blueprint('main', __name__)
 ai_service = AIService()
@@ -192,7 +194,10 @@ def regenerate_text():
         if not data or 'text' not in data:
             return jsonify({'error': 'No text provided'}), 400
 
-        regenerated_text = ai_service.regenerate_text(data['text'])
+        current_content = data.get('currentContent', '')
+        new_content = data['text']
+        
+        regenerated_text = ai_service.regenerate_text(current_content, new_content)
         return jsonify({'regenerated_text': regenerated_text})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -206,3 +211,58 @@ def health_check():
         'status': 'healthy',
         'message': 'Ora API is running'
     })
+
+@bp.route('/test-ai', methods=['GET'])
+def test_ai():
+    """
+    Test AI API connection
+    """
+    try:
+        # 简单的测试请求
+        test_messages = [
+            {
+                'role': 'system',
+                'content': 'You are a helpful assistant.'
+            },
+            {
+                'role': 'user',
+                'content': 'Say hello in one word.'
+            }
+        ]
+        
+        print(f"Testing AI API with key: {Config.CHAT_API_KEY[:10]}...")
+        response = requests.post(
+            'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+            json={
+                'model': 'glm-4-plus',
+                'messages': test_messages
+            },
+            headers={
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {Config.CHAT_API_KEY}'
+            },
+            timeout=10
+        )
+        
+        print(f"Test API Response status: {response.status_code}")
+        response_data = response.json()
+        
+        if response.ok:
+            return jsonify({
+                'status': 'success',
+                'message': 'AI API is working',
+                'response': response_data
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'AI API error',
+                'error': response_data
+            }), 500
+            
+    except Exception as e:
+        print(f"Test AI error: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500

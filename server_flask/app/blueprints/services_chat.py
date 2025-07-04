@@ -7,12 +7,15 @@ class AIService:
     @staticmethod
     def regenerate_text(current_content, new_content):
         try:
+            print(f"Regenerate text request - Current: '{current_content}', New: '{new_content}'")
+            
             prompt = ''
             if not current_content:
                 prompt = f'Please help improve the fluency of this text: "{new_content}". Return ONLY the improved text without any additional commentary or explanations.'
             else:
                 prompt = f'Please combine and improve the fluency of these two texts. You can make some adjustment to make it more fluent. First text: "{current_content}". Second text: "{new_content}". Return ONLY the improved text without any additional commentary or explanations.'
 
+            print(f"Sending regeneration request to AI API...")
             response = requests.post(
                 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
                 json={
@@ -30,24 +33,44 @@ class AIService:
                 },
                 headers={
                     'Content-Type': 'application/json',
-                    'Authorization': f'Bearer {Config.TEXT_REGENERATION_API_KEY}'
-                }
+                    'Authorization': f'Bearer {Config.CHAT_API_KEY}'
+                },
+                timeout=30
             )
+            
+            print(f"Regeneration API Response status: {response.status_code}")
             response_data = response.json()
             
             if not response.ok:
+                print(f"Regeneration API Error response: {response_data}")
                 raise Exception(f"API Error: {response_data.get('error', 'Unknown error')}")
             
             if 'choices' not in response_data or not response_data['choices']:
+                print(f"Invalid regeneration response format: {response_data}")
                 raise Exception("No response from AI model")
                 
-            return response_data['choices'][0]['message']['content'].strip()
+            result = response_data['choices'][0]['message']['content'].strip()
+            print(f"Regeneration successful: '{result}'")
+            return result
+        except requests.exceptions.Timeout:
+            print("Regeneration request timeout error")
+            raise Exception("Request timeout - please try again")
+        except requests.exceptions.ConnectionError:
+            print("Regeneration connection error")
+            raise Exception("Network connection error - please check your internet connection")
+        except requests.exceptions.RequestException as e:
+            print(f"Regeneration request error: {str(e)}")
+            raise Exception(f"Network error: {str(e)}")
         except Exception as e:
+            print(f"Regeneration error: {str(e)}")
             raise Exception(f"Failed to regenerate text: {str(e)}")
 
     @staticmethod
     def chat(messages):
         try:
+            # 添加详细的日志记录
+            print(f"Chat request - Messages count: {len(messages)}")
+            
             if not any(msg.get('role') == 'system' for msg in messages):
                 messages.insert(0, {
                     'role': 'system',
@@ -58,6 +81,7 @@ class AIService:
                               Third, use a gentle tone to encourage the older adults to recall and think."
                 })
 
+            print(f"Sending request to AI API...")
             response = requests.post(
                 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
                 json={
@@ -67,18 +91,34 @@ class AIService:
                 headers={
                     'Content-Type': 'application/json',
                     'Authorization': f'Bearer {Config.CHAT_API_KEY}'
-                }
+                },
+                timeout=30  # 添加超时设置
             )
+            
+            print(f"API Response status: {response.status_code}")
             response_data = response.json()
             
             if not response.ok:
-                raise Exception(f"API Error: {response_data.get('error', 'Unknown error')}")
+                print(f"API Error response: {response_data}")
+                raise Exception(f"API Error {response.status_code}: {response_data.get('error', 'Unknown error')}")
             
             if 'choices' not in response_data or not response_data['choices']:
+                print(f"Invalid response format: {response_data}")
                 raise Exception("No response from AI model")
                 
+            print("Chat request successful")
             return response_data
+        except requests.exceptions.Timeout:
+            print("Request timeout error")
+            raise Exception("Request timeout - please try again")
+        except requests.exceptions.ConnectionError:
+            print("Connection error")
+            raise Exception("Network connection error - please check your internet connection")
+        except requests.exceptions.RequestException as e:
+            print(f"Request error: {str(e)}")
+            raise Exception(f"Network error: {str(e)}")
         except Exception as e:
+            print(f"Chat error: {str(e)}")
             raise Exception(f"Failed to process chat: {str(e)}")
 
 class ConversationService:

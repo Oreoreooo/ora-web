@@ -168,12 +168,12 @@ const Auth = ({ mode = 'login' }) => {
 
         <div className="auth-switch">
           <span>
-            {isLogin ? "还没有账户？ " : "已有账户？ "}
+            {isLogin ? "Haven't an account? " : "Already have an account? "}
             <a 
               href={isLogin ? '/register' : '/login'}
               className="switch-btn"
             >
-              {isLogin ? '注册' : '登录'}
+              {isLogin ? 'Register' : 'Login'}
             </a>
           </span>
         </div>

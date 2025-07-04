@@ -59,7 +59,7 @@ const Layout = ({ children }) => {
                     <div className="navbar-auth">
                         {user ? (
                             <div className="user-menu">
-                                <span className="welcome-text">Welcome, {user.name || user.username}</span>
+                                <span className="welcome-text">Hi, {user.name || user.username}</span>
                                 <button 
                                     className="logout-btn"
                                     onClick={handleLogout}

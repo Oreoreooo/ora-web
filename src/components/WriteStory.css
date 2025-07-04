@@ -36,6 +36,7 @@
   display: flex;
   gap: 20px;
   width: 100%;
+  align-items: stretch;
 }
 
 .story-form {
@@ -45,6 +46,7 @@
   gap: 24px;
   padding: 0;
   margin: 0;
+  justify-content: space-between;
 }
 
 .form-group {
@@ -89,7 +91,7 @@
   display: flex;
   justify-content: center;
   width: 100%;
-  margin-top: 20px;
+  margin-top: auto;
 }
 
 .action-button {
@@ -119,7 +121,6 @@
   display: flex;
   flex-direction: column;
   width: 50%;
-  height: 100%;
   background-color: rgba(240, 247, 255, 0.5);
   border-radius: 11px;
   padding: 20px;
@@ -139,10 +140,15 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  height: 400px;
+  flex: 1;
+  min-height: 300px;
+  max-height: 300px;
   overflow-y: auto;
   padding-right: 5px;
   margin-bottom: 15px;
+  /* Ensure scrollbar is visible */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(18, 113, 202, 0.5) rgba(212, 232, 255, 0.3);
 }
 
 .chat-message {
@@ -279,6 +285,37 @@
 .send-button:disabled {
   background-color: #ccc;
   cursor: not-allowed;
+}
+
+/* Custom scrollbar styles for form-textarea and chat-messages */
+.form-textarea::-webkit-scrollbar,
+.chat-messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+.form-textarea::-webkit-scrollbar-track,
+.chat-messages::-webkit-scrollbar-track {
+  background: rgba(212, 232, 255, 0.3);
+  border-radius: 4px;
+}
+
+.form-textarea::-webkit-scrollbar-thumb,
+.chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(18, 113, 202, 0.5);
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+}
+
+.form-textarea::-webkit-scrollbar-thumb:hover,
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: rgba(18, 113, 202, 0.7);
+}
+
+/* Firefox scrollbar styles */
+.form-textarea,
+.chat-messages {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(18, 113, 202, 0.5) rgba(212, 232, 255, 0.3);
 }
 
 /* Large screens */
@@ -419,4 +456,4 @@
   40% { 
     transform: scale(1.0);
   }
-} 
+}

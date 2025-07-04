@@ -25,15 +25,53 @@ const SpeakToOra = ({ onReturn }) => {
   });
   const [saveStatus, setSaveStatus] = useState('');
 
+  // Check if user is authenticated
+  const checkAuth = () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      // Show alert and redirect to login if no token
+      alert('请先登录');
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 500);
+      return false;
+    }
+    return true;
+  };
+
+  // Handle API errors, especially 401 unauthorized
+  const handleApiError = (error) => {
+    // For fetch API, check the error message for status codes
+    if (error.message?.includes('401') || error.message?.includes('HTTP error! status: 401')) {
+      // Token expired or invalid, show alert and redirect to login
+      alert('登录已过期，请重新登录');
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('user');
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 500); // Small delay to ensure alert is shown
+    }
+    return error;
+  };
+
+  // Check authentication on component mount
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
   // Create a new conversation when component mounts
   useEffect(() => {
     const createConversation = async () => {
+      if (!checkAuth()) return;
+      
       try {
         console.log('Attempting to create conversation...');
-        const response = await fetch('http://localhost:3002/api/conversations', {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('http://localhost:5000/api/conversations', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
             title: 'New Conversation',
@@ -61,6 +99,7 @@ const SpeakToOra = ({ onReturn }) => {
           message: error.message,
           stack: error.stack
         });
+        handleApiError(error);
       }
     };
 
@@ -87,16 +126,20 @@ const SpeakToOra = ({ onReturn }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    if (!checkAuth()) return;
+    
     if (!formData.title || !formData.thoughts || !formData.date) {
       setSaveStatus('Please fill in all fields');
       return;
     }
 
     try {
-      const response = await fetch('http://localhost:3002/api/conversations', {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch('http://localhost:5000/api/conversations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           title: formData.title,
@@ -127,19 +170,24 @@ const SpeakToOra = ({ onReturn }) => {
       }
     } catch (error) {
       console.error('Error saving story:', error);
+      handleApiError(error);
       setSaveStatus('Error saving story. Please try again.');
     }
   };
 
   // Microphone request handler
   const handleMicrophoneRequest = async () => {
+    if (!checkAuth()) return;
+    
     if (isRecording) {
       // Stop recording
       try {
-        const response = await fetch('http://localhost:3002/api/asr/stop', {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('http://localhost:5000/api/asr/stop', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
           },
         });
         
@@ -157,15 +205,15 @@ const SpeakToOra = ({ onReturn }) => {
           
           // Improve text fluency using text regeneration API
           try {
-            const regenerateResponse = await fetch('http://localhost:3002/api/text/regenerate', {
+            const token = localStorage.getItem('access_token');
+            const regenerateResponse = await fetch('http://localhost:5000/api/regenerate-text', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
               },
               body: JSON.stringify({
-                text: data.text,
-                style: 'fluent',
-                preserve_meaning: true
+                text: data.text
               }),
             });
 
@@ -178,7 +226,7 @@ const SpeakToOra = ({ onReturn }) => {
             // Update the thoughts field with improved text
             setFormData(prev => ({
               ...prev,
-              thoughts: prev.thoughts ? `${prev.thoughts}\n${improvedText.text}` : improvedText.text
+              thoughts: prev.thoughts ? `${prev.thoughts}\n${improvedText.regenerated_text}` : improvedText.regenerated_text
             }));
           } catch (error) {
             console.error('Text regeneration error:', error);
@@ -197,10 +245,12 @@ const SpeakToOra = ({ onReturn }) => {
           // Get AI response
           setIsLoading(true);
           try {
-            const chatResponse = await fetch('http://localhost:3002/api/chat', {
+            const token = localStorage.getItem('access_token');
+            const chatResponse = await fetch('http://localhost:5000/api/chat', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
               },
               body: JSON.stringify({
                 messages: updatedMessages,
@@ -222,6 +272,7 @@ const SpeakToOra = ({ onReturn }) => {
             }
           } catch (error) {
             console.error('Chat error:', error);
+            handleApiError(error);
             setMicError('Failed to get AI response: ' + (error.message || 'Unknown error'));
             // Add error message to chat
             setChatMessages(prev => [...prev, {
@@ -234,6 +285,7 @@ const SpeakToOra = ({ onReturn }) => {
         }
       } catch (error) {
         console.error('Stop recording error:', error);
+        handleApiError(error);
         setMicError('Failed to stop recording: ' + (error.message || 'Unknown error'));
       } finally {
         // Always set isRecording to false after stopping
@@ -242,10 +294,12 @@ const SpeakToOra = ({ onReturn }) => {
     } else {
       // Start recording logic
       try {
-        const response = await fetch('http://localhost:3002/api/asr/start', {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('http://localhost:5000/api/asr/start', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
           },
         });
         
@@ -263,6 +317,7 @@ const SpeakToOra = ({ onReturn }) => {
         }
       } catch (error) {
         console.error('Start recording error:', error);
+        handleApiError(error);
         setMicError('Failed to start recording: ' + (error.message || 'Unknown error'));
       }
     }

@@ -18,6 +18,39 @@ const WriteStory = ({ onReturn }) => {
   const [conversationId, setConversationId] = useState(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
 
+  // Check if user is authenticated
+  const checkAuth = () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      // Show alert and redirect to login if no token
+      alert('请先登录');
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 500);
+      return false;
+    }
+    return true;
+  };
+
+  // Handle API errors, especially 401 unauthorized
+  const handleApiError = (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid, show alert and redirect to login
+      alert('登录已过期，请重新登录');
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('user');
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 500); // Small delay to ensure alert is shown
+    }
+    return error;
+  };
+
+  // Check authentication on component mount
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
   // Update thoughts content based on user chat messages only
   useEffect(() => {
     const userMessages = chatMessages
@@ -31,19 +64,27 @@ const WriteStory = ({ onReturn }) => {
   }, [chatMessages]);
 
   const regenerateText = async (newContent) => {
+    if (!checkAuth()) return;
+    
     setIsRegenerating(true);
     try {
-      const response = await axios.post('http://localhost:3002/api/regenerate-text', {
-        currentContent: formData.thoughts,
-        newContent: newContent
+      const token = localStorage.getItem('access_token');
+      const response = await axios.post('http://localhost:5000/api/regenerate-text', {
+        text: newContent,
+        currentContent: formData.thoughts
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
 
       setFormData(prev => ({
         ...prev,
-        thoughts: response.data.regeneratedText
+        thoughts: response.data.regenerated_text
       }));
     } catch (error) {
       console.error('Error regenerating text:', error);
+      handleApiError(error);
       // If regeneration fails, just use the original content
       setFormData(prev => ({
         ...prev,
@@ -65,17 +106,24 @@ const WriteStory = ({ onReturn }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    if (!checkAuth()) return;
+    
     if (!formData.title || !formData.thoughts || !formData.date) {
       setSaveStatus('Please fill in all fields');
       return;
     }
 
     try {
-      const response = await axios.post('http://localhost:3002/api/conversations', {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.post('http://localhost:5000/api/conversations', {
         title: formData.title,
         content: formData.thoughts,
         date: formData.date,
         messages: chatMessages
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
 
       if (response.data.id) {
@@ -94,6 +142,7 @@ const WriteStory = ({ onReturn }) => {
       }
     } catch (error) {
       console.error('Error saving story:', error);
+      handleApiError(error);
       setSaveStatus('Error saving story. Please try again.');
     }
   };
@@ -106,6 +155,7 @@ const WriteStory = ({ onReturn }) => {
     e.preventDefault();
     
     if (!chatInput.trim()) return;
+    if (!checkAuth()) return;
     
     // Add user message to chat
     const userMessage = { role: 'user', content: chatInput };
@@ -116,9 +166,14 @@ const WriteStory = ({ onReturn }) => {
     
     try {
       // Call our backend API
-      const response = await axios.post('http://localhost:3002/api/chat', {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.post('http://localhost:5000/api/chat', {
         messages: updatedMessages,
         conversationId: conversationId
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
       
       // Extract the assistant's response from the API response
@@ -127,6 +182,7 @@ const WriteStory = ({ onReturn }) => {
       setChatMessages([...updatedMessages, aiMessage]);
     } catch (error) {
       console.error('Error sending message to AI:', error);
+      handleApiError(error);
       // Add error message to chat
       setChatMessages([
         ...updatedMessages, 
