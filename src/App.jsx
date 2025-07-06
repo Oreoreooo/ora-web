@@ -6,6 +6,7 @@ import Auth from './components/Auth';
 import StoryPreference from './components/StoryPreference';
 import WriteStory from './components/WriteStory';
 import SpeakToOra from './components/SpeakToOra';
+import DiaryBrowser from './components/DiaryBrowser';
 import './App.css';
 
 // 首页组件
@@ -18,6 +19,9 @@ const HomePage = () => {
         <div className="hero-buttons">
           <button onClick={() => window.location.href = '/memories'} className="primary-btn">
             Start Creating Memories
+          </button>
+          <button onClick={() => window.location.href = '/diary'} className="secondary-btn">
+            View My Diary
           </button>
           <button onClick={() => window.location.href = '/stories'} className="secondary-btn">
             Story Preferences
@@ -50,6 +54,7 @@ function App() {
           <Route path="/stories" element={<StoryPreference />} />
           <Route path="/write" element={<WriteStory />} />
           <Route path="/speak" element={<SpeakToOra />} />
+          <Route path="/diary" element={<DiaryBrowser />} />
           {/* 重定向未知路由到首页 */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
