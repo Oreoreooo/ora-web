@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.blueprints.services_chat import AIService
 from app.blueprints.services_asr import ASRService
+# from app.blueprints.openai import AIService
 from app.extension import db
 from app.models import UserModel, Conversation, ChatMessage
 from io import BytesIO
@@ -202,67 +203,3 @@ def regenerate_text():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@bp.route('/health', methods=['GET'])
-def health_check():
-    """
-    Health check endpoint
-    """
-    return jsonify({
-        'status': 'healthy',
-        'message': 'Ora API is running'
-    })
-
-@bp.route('/test-ai', methods=['GET'])
-def test_ai():
-    """
-    Test AI API connection
-    """
-    try:
-        # 简单的测试请求
-        test_messages = [
-            {
-                'role': 'system',
-                'content': 'You are a helpful assistant.'
-            },
-            {
-                'role': 'user',
-                'content': 'Say hello in one word.'
-            }
-        ]
-        
-        print(f"Testing AI API with key: {Config.CHAT_API_KEY[:10]}...")
-        response = requests.post(
-            'https://open.bigmodel.cn/api/paas/v4/chat/completions',
-            json={
-                'model': 'glm-4-plus',
-                'messages': test_messages
-            },
-            headers={
-                'Content-Type': 'application/json',
-                'Authorization': f'Bearer {Config.CHAT_API_KEY}'
-            },
-            timeout=10
-        )
-        
-        print(f"Test API Response status: {response.status_code}")
-        response_data = response.json()
-        
-        if response.ok:
-            return jsonify({
-                'status': 'success',
-                'message': 'AI API is working',
-                'response': response_data
-            })
-        else:
-            return jsonify({
-                'status': 'error',
-                'message': 'AI API error',
-                'error': response_data
-            }), 500
-            
-    except Exception as e:
-        print(f"Test AI error: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500

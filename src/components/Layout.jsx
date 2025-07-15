@@ -1,22 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import './Layout.css';
+import { isAuthenticated, getUserInfo, clearAuth } from '../utils/auth';
 
 const Layout = ({ children }) => {
     const [user, setUser] = useState(null);
 
     useEffect(() => {
         // 检查本地存储中的用户信息
-        const token = localStorage.getItem('access_token');
-        const userData = localStorage.getItem('user');
-        if (token && userData) {
-            setUser(JSON.parse(userData));
+        if (isAuthenticated()) {
+            const userData = getUserInfo();
+            if (userData) {
+                setUser(userData);
+            }
         }
     }, []);
 
     const handleLogout = () => {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user');
+        clearAuth();
         setUser(null);
         // 跳转到首页
         window.location.href = '/';
@@ -51,9 +51,6 @@ const Layout = ({ children }) => {
                             </li>
                             <li className="nav-item">
                                 <a href="/diary" className="nav-link">My Diary</a>
-                            </li>
-                            <li className="nav-item">
-                                <a href="/stories" className="nav-link">Preference</a>
                             </li>
                         </ul>
                     </nav>
@@ -96,11 +93,11 @@ const Layout = ({ children }) => {
             </main>
 
             {/* 页脚 */}
-            <footer className="footer">
+            {/* <footer className="footer">
                 <div className="footer-container">
                     <p>&copy; 2025 Ora. All rights reserved.</p>
                 </div>
-            </footer>
+            </footer> */}
         </div>
     );
 };

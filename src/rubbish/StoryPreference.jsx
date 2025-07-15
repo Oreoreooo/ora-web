@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './StoryPreference.css';
 import SpeakToOra from './SpeakToOra';
-import WriteStory from './WriteStory';
+import WriteStory from '../components/WriteStory';
 
 const StoryPreference = ({ onReturn }) => {
   const [showSpeakToOra, setShowSpeakToOra] = useState(false);

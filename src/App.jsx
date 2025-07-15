@@ -1,30 +1,46 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
-import MemoriesCreator from './components/MemoriesCreator';
 import Auth from './components/Auth';
-import StoryPreference from './components/StoryPreference';
+// import StoryPreference from './components/StoryPreference';
 import WriteStory from './components/WriteStory';
-import SpeakToOra from './components/SpeakToOra';
+// import SpeakToOra from './components/SpeakToOra';
 import DiaryBrowser from './components/DiaryBrowser';
+import { isAuthenticated, checkAuthWithRedirect } from './utils/auth';
 import './App.css';
+
+// 受保护的路由组件
+const ProtectedRoute = ({ children }) => {
+  const [shouldRender, setShouldRender] = useState(false);
+
+  useEffect(() => {
+    if (checkAuthWithRedirect()) {
+      setShouldRender(true);
+    }
+  }, []);
+
+  return shouldRender ? children : null;
+};
 
 // 首页组件
 const HomePage = () => {
+  const handleProtectedNavigation = (path) => {
+    if (checkAuthWithRedirect()) {
+      window.location.href = path;
+    }
+  };
+
   return (
     <div className="homepage">
       <div className="hero-section">
         <h1>Welcome to Ora</h1>
         <p>Create your personal memory stories</p>
         <div className="hero-buttons">
-          <button onClick={() => window.location.href = '/memories'} className="primary-btn">
+          <button onClick={() => handleProtectedNavigation('/memories')} className="primary-btn">
             Start Creating Memories
           </button>
-          <button onClick={() => window.location.href = '/diary'} className="secondary-btn">
+          <button onClick={() => handleProtectedNavigation('/diary')} className="secondary-btn">
             View My Diary
-          </button>
-          <button onClick={() => window.location.href = '/stories'} className="secondary-btn">
-            Story Preferences
           </button>
         </div>
       </div>
@@ -50,11 +66,26 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
-          <Route path="/memories" element={<MemoriesCreator />} />
-          <Route path="/stories" element={<StoryPreference />} />
-          <Route path="/write" element={<WriteStory />} />
-          <Route path="/speak" element={<SpeakToOra />} />
-          <Route path="/diary" element={<DiaryBrowser />} />
+          <Route path="/memories" element={
+            <ProtectedRoute>
+              <WriteStory />
+            </ProtectedRoute>
+          } />
+          {/* <Route path="/write" element={
+            <ProtectedRoute>
+              <WriteStory />
+            </ProtectedRoute>
+          } />
+          <Route path="/speak" element={
+            <ProtectedRoute>
+              <SpeakToOra />
+            </ProtectedRoute>
+          } /> */}
+          <Route path="/diary" element={
+            <ProtectedRoute>
+              <DiaryBrowser />
+            </ProtectedRoute>
+          } />
           {/* 重定向未知路由到首页 */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

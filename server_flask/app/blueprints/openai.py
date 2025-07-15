@@ -1,4 +1,4 @@
-import requests
+from openai import OpenAI
 from app.extension import db
 from app.models import Conversation, ChatMessage
 from ..config import Config
@@ -16,51 +16,35 @@ class AIService:
                 prompt = f'Please combine and improve the fluency of these two texts. You can make some adjustment to make it more fluent. First text: "{current_content}". Second text: "{new_content}". Return ONLY the improved text without any additional commentary or explanations.'
 
             print(f"Sending regeneration request to AI API...")
-            response = requests.post(
-                'https://open.bigmodel.cn/api/paas/v4/chat/completions',
-                json={
-                    'model': 'glm-4-plus',
-                    'messages': [
-                        {
-                            'role': 'system',
-                            'content': "You are an assistant who helps improve text fluency.No other additional information should be added.Return ONLY the improved text without any additional commentary, explanations, or formatting."
-                        },
-                        {
-                            'role': 'user',
-                            'content': prompt
-                        }
-                    ]
+            
+            client = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=Config.GPT_API_KEY,
+            )
+            
+            completion = client.chat.completions.create(
+                extra_headers={
+                    "HTTP-Referer": "https://your-site.com",
+                    "X-Title": "Ora AI Assistant",
                 },
-                headers={
-                    'Content-Type': 'application/json',
-                    'Authorization': f'Bearer {Config.CHAT_API_KEY}'
-                },
+                model="openai/gpt-4o",
+                messages=[
+                    {
+                        'role': 'system',
+                        'content': "You are an assistant who helps improve text fluency.No other additional information should be added.Return ONLY the improved text without any additional commentary, explanations, or formatting."
+                    },
+                    {
+                        'role': 'user',
+                        'content': prompt
+                    }
+                ],
                 timeout=30
             )
             
-            print(f"Regeneration API Response status: {response.status_code}")
-            response_data = response.json()
-            
-            if not response.ok:
-                print(f"Regeneration API Error response: {response_data}")
-                raise Exception(f"API Error: {response_data.get('error', 'Unknown error')}")
-            
-            if 'choices' not in response_data or not response_data['choices']:
-                print(f"Invalid regeneration response format: {response_data}")
-                raise Exception("No response from AI model")
-                
-            result = response_data['choices'][0]['message']['content'].strip()
+            print(f"Regeneration API Response successful")
+            result = completion.choices[0].message.content.strip()
             print(f"Regeneration successful: '{result}'")
             return result
-        except requests.exceptions.Timeout:
-            print("Regeneration request timeout error")
-            raise Exception("Request timeout - please try again")
-        except requests.exceptions.ConnectionError:
-            print("Regeneration connection error")
-            raise Exception("Network connection error - please check your internet connection")
-        except requests.exceptions.RequestException as e:
-            print(f"Regeneration request error: {str(e)}")
-            raise Exception(f"Network error: {str(e)}")
         except Exception as e:
             print(f"Regeneration error: {str(e)}")
             raise Exception(f"Failed to regenerate text: {str(e)}")
@@ -78,41 +62,35 @@ class AIService:
                 })
 
             print(f"Sending request to AI API...")
-            response = requests.post(
-                'https://open.bigmodel.cn/api/paas/v4/chat/completions',
-                json={
-                    'model': 'glm-4-Plus',
-                    'messages': messages
-                },
-                headers={
-                    'Content-Type': 'application/json',
-                    'Authorization': f'Bearer {Config.CHAT_API_KEY}'
-                },
-                timeout=30  # 添加超时设置
+            
+            client = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=Config.GPT_API_KEY,
             )
             
-            print(f"API Response status: {response.status_code}")
-            response_data = response.json()
+            completion = client.chat.completions.create(
+                extra_headers={
+                    "HTTP-Referer": "https://your-site.com",
+                    "X-Title": "Ora AI Assistant",
+                },
+                model="openai/gpt-4o",
+                messages=messages,
+                timeout=30
+            )
             
-            if not response.ok:
-                print(f"API Error response: {response_data}")
-                raise Exception(f"API Error {response.status_code}: {response_data.get('error', 'Unknown error')}")
-            
-            if 'choices' not in response_data or not response_data['choices']:
-                print(f"Invalid response format: {response_data}")
-                raise Exception("No response from AI model")
-                
             print("Chat request successful")
+            # Convert OpenAI response to match expected format
+            response_data = {
+                'choices': [
+                    {
+                        'message': {
+                            'role': completion.choices[0].message.role,
+                            'content': completion.choices[0].message.content
+                        }
+                    }
+                ]
+            }
             return response_data
-        except requests.exceptions.Timeout:
-            print("Request timeout error")
-            raise Exception("Request timeout - please try again")
-        except requests.exceptions.ConnectionError:
-            print("Connection error")
-            raise Exception("Network connection error - please check your internet connection")
-        except requests.exceptions.RequestException as e:
-            print(f"Request error: {str(e)}")
-            raise Exception(f"Network error: {str(e)}")
         except Exception as e:
             print(f"Chat error: {str(e)}")
             raise Exception(f"Failed to process chat: {str(e)}")

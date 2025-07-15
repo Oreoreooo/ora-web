@@ -11,4 +11,5 @@ gunicorn==21.2.0
 uvicorn==0.29.0
 PyAudio==0.2.14
 numpy==1.26.4
-funasr==0.10.0 
+funasr==0.10.0
+openai==1.55.0 

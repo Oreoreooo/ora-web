@@ -1,5 +1,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Palanquin+Dark:wght@400;700&display=swap');
 
+.desktop-frame {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  position: relative;
+}
+
 .return-button {
   position: absolute;
   top: 20px;
@@ -27,18 +37,22 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: 3rem;
+  justify-content: center;
+  margin-bottom: 1.5rem;
   position: relative;
   width: 180px;
   height: 180px;
-  flex: 1;
-  justify-content: center;
 }
 
 .robot-icon {
   position: relative;
+  top: -60px;
+  left: -30px;
   width: 100%;
   height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .robot-icon img {
@@ -48,10 +62,10 @@
 }
 
 .question-icon {
-  position: absolute;
-  top: -30px;
-  left: -30px;
-  width: 70px;
+  position: relative;
+  top: -300px;
+  left: 30px;
+  width: 60px;
   height: 70px;
 }
 
@@ -67,6 +81,7 @@
   gap: 1.5rem;
   width: 100%;
   align-items: center;
+  transform: translateY(-100px);
 }
 
 .action-button {
@@ -93,6 +108,10 @@
 
 /* Large screens */
 @media (min-width: 1200px) {
+  .desktop-frame {
+    padding: 3rem;
+  }
+
   .return-button {
     font-size: 18px;
     top: 30px;
@@ -121,6 +140,10 @@
 
 /* Medium screens */
 @media (max-width: 768px) {
+  .desktop-frame {
+    padding: 1.5rem;
+  }
+
   .return-button {
     top: 15px;
     left: 15px;
@@ -147,6 +170,7 @@
     flex-direction: column;
     align-items: center;
     gap: 1rem;
+    transform: translateY(-80px);
   }
   
   .action-button {
@@ -157,6 +181,10 @@
 
 /* Small screens */
 @media (max-width: 480px) {
+  .desktop-frame {
+    padding: 1rem;
+  }
+
   .return-button {
     top: 10px;
     left: 10px;
@@ -173,7 +201,11 @@
   .icons-container {
     width: 120px;
     height: 120px;
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
+  }
+
+  .buttons-container {
+    transform: translateY(-60px);
   }
   
   .question-icon {

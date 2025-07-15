@@ -50,7 +50,8 @@ class Config:
     # API Keys
     CHAT_API_KEY = os.getenv('CHAT_API_KEY')
     TEXT_REGENERATION_API_KEY = os.getenv('TEXT_REGENERATION_API_KEY')
-    
+    GPT_API_KEY = os.getenv('GPT_API_KEY')
+
     # Server settings
     HOST = os.environ.get('HOST') or 'localhost'
     PORT = int(os.environ.get('PORT') or 3002)

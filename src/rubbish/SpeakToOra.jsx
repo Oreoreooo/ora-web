@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './SpeakToOra.css';
-import WriteStory from './WriteStory';
+import WriteStory from '../components/WriteStory';
+import { getAccessToken, handleApiError, getAuthHeaders, checkAuthWithRedirect } from '../utils/auth';
 
 const SpeakToOra = ({ onReturn }) => {
   const [showWriteStory, setShowWriteStory] = useState(false);
@@ -25,53 +26,23 @@ const SpeakToOra = ({ onReturn }) => {
   });
   const [saveStatus, setSaveStatus] = useState('');
 
-  // Check if user is authenticated
-  const checkAuth = () => {
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      // Show alert and redirect to login if no token
-      alert('请先登录');
-      setTimeout(() => {
-        window.location.href = '/';
-      }, 500);
-      return false;
-    }
-    return true;
-  };
-
-  // Handle API errors, especially 401 unauthorized
-  const handleApiError = (error) => {
-    // For fetch API, check the error message for status codes
-    if (error.message?.includes('401') || error.message?.includes('HTTP error! status: 401')) {
-      // Token expired or invalid, show alert and redirect to login
-      alert('登录已过期，请重新登录');
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('user');
-      setTimeout(() => {
-        window.location.href = '/';
-      }, 500); // Small delay to ensure alert is shown
-    }
-    return error;
-  };
-
   // Check authentication on component mount
   useEffect(() => {
-    checkAuth();
+    checkAuthWithRedirect();
   }, []);
 
   // Create a new conversation when component mounts
   useEffect(() => {
     const createConversation = async () => {
-      if (!checkAuth()) return;
+      if (!checkAuthWithRedirect()) return;
       
       try {
         console.log('Attempting to create conversation...');
-        const token = localStorage.getItem('access_token');
         const response = await fetch('http://localhost:5000/api/conversations', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            ...getAuthHeaders()
           },
           body: JSON.stringify({
             title: 'New Conversation',
@@ -126,7 +97,7 @@ const SpeakToOra = ({ onReturn }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!checkAuth()) return;
+    if (!checkAuthWithRedirect()) return;
     
     if (!formData.title || !formData.thoughts || !formData.date) {
       setSaveStatus('Please fill in all fields');
@@ -134,12 +105,11 @@ const SpeakToOra = ({ onReturn }) => {
     }
 
     try {
-      const token = localStorage.getItem('access_token');
       const response = await fetch('http://localhost:5000/api/conversations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          ...getAuthHeaders()
         },
         body: JSON.stringify({
           title: formData.title,
@@ -177,17 +147,16 @@ const SpeakToOra = ({ onReturn }) => {
 
   // Microphone request handler
   const handleMicrophoneRequest = async () => {
-    if (!checkAuth()) return;
+    if (!checkAuthWithRedirect()) return;
     
     if (isRecording) {
       // Stop recording
       try {
-        const token = localStorage.getItem('access_token');
         const response = await fetch('http://localhost:5000/api/asr/stop', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            ...getAuthHeaders()
           },
         });
         
@@ -205,12 +174,11 @@ const SpeakToOra = ({ onReturn }) => {
           
           // Improve text fluency using text regeneration API
           try {
-            const token = localStorage.getItem('access_token');
             const regenerateResponse = await fetch('http://localhost:5000/api/regenerate-text', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                ...getAuthHeaders()
               },
               body: JSON.stringify({
                 text: data.text
@@ -245,12 +213,11 @@ const SpeakToOra = ({ onReturn }) => {
           // Get AI response
           setIsLoading(true);
           try {
-            const token = localStorage.getItem('access_token');
             const chatResponse = await fetch('http://localhost:5000/api/chat', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                ...getAuthHeaders()
               },
               body: JSON.stringify({
                 messages: updatedMessages,
@@ -294,12 +261,11 @@ const SpeakToOra = ({ onReturn }) => {
     } else {
       // Start recording logic
       try {
-        const token = localStorage.getItem('access_token');
         const response = await fetch('http://localhost:5000/api/asr/start', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            ...getAuthHeaders()
           },
         });
         

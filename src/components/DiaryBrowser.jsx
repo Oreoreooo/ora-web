@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './DiaryBrowser.css';
 import axios from 'axios';
+import { getAccessToken, handleApiError, getAuthHeaders, checkAuthWithRedirect } from '../utils/auth';
 
 const DiaryBrowser = () => {
   const [diaries, setDiaries] = useState([]);
@@ -17,35 +18,9 @@ const DiaryBrowser = () => {
   const dateFilterRef = useRef(null);
   const hideTimeoutRef = useRef(null);
 
-  // Check if user is authenticated
-  const checkAuth = () => {
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      alert('Please login first');
-      setTimeout(() => {
-        window.location.href = '/';
-      }, 500);
-      return false;
-    }
-    return true;
-  };
-
-  // Handle API errors, especially 401 unauthorized
-  const handleApiError = (error) => {
-    if (error.response?.status === 401) {
-      alert('Session expired, please login again');
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('user');
-      setTimeout(() => {
-        window.location.href = '/';
-      }, 500);
-    }
-    return error;
-  };
-
   // Load conversations on component mount
   useEffect(() => {
-    if (checkAuth()) {
+    if (checkAuthWithRedirect()) {
       loadDiaries();
     }
   }, []);
@@ -53,11 +28,8 @@ const DiaryBrowser = () => {
   const loadDiaries = async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('access_token');
       const response = await axios.get('http://localhost:5000/api/conversations', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: getAuthHeaders()
       });
       
       setDiaries(response.data);
@@ -73,7 +45,7 @@ const DiaryBrowser = () => {
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -161,11 +133,8 @@ const DiaryBrowser = () => {
     }
 
     try {
-      const token = localStorage.getItem('access_token');
       await axios.delete(`http://localhost:5000/api/conversations/${diaryId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: getAuthHeaders()
       });
       
       // Reload diaries
