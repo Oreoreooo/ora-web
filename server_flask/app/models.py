@@ -76,3 +76,33 @@ class ChatMessage(db.Model):
             'content': self.content,
             'created_at': self.created_at.isoformat()
         } 
+
+class CommunityPost(db.Model):
+    __tablename__ = 'community_posts'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    is_public = db.Column(db.Boolean, default=True, nullable=False)
+    source_type = db.Column(db.String(50), default='original')  # 'original', 'diary', 'system'
+    source_id = db.Column(db.Integer, nullable=True)  # conversation_id if source_type is 'diary'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    author = db.relationship('UserModel', backref=db.backref('community_posts', lazy=True), lazy=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'author_name': self.author.name if self.author else 'Anonymous',
+            'title': self.title,
+            'content': self.content,
+            'is_public': self.is_public,
+            'source_type': self.source_type,
+            'source_id': self.source_id,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }

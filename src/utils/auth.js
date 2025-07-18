@@ -18,6 +18,19 @@ export const getUserInfo = () => {
 
 // 清除认证信息
 export const clearAuth = () => {
+  // 不再清除用户草稿，让用户下次登录时可以继续
+  // clearAllUserDrafts();
+  
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('user');
+};
+
+// 清除认证信息（可选择是否清除草稿）
+export const clearAuthWithDrafts = (clearDrafts = false) => {
+  if (clearDrafts) {
+    clearAllUserDrafts();
+  }
+  
   localStorage.removeItem('access_token');
   localStorage.removeItem('user');
 };
@@ -50,4 +63,22 @@ export const handleApiError = (error) => {
 export const getAuthHeaders = () => {
   const token = getAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+// 清除用户特定的草稿
+export const clearUserDraft = (userId) => {
+  if (userId) {
+    const draftKey = `writeStoryDraft_user_${userId}`;
+    localStorage.removeItem(draftKey);
+  }
+};
+
+// 清除所有用户草稿（登出时使用）
+export const clearAllUserDrafts = () => {
+  const keys = Object.keys(localStorage);
+  keys.forEach(key => {
+    if (key.startsWith('writeStoryDraft_user_')) {
+      localStorage.removeItem(key);
+    }
+  });
 };

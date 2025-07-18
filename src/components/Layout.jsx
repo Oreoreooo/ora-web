@@ -52,6 +52,9 @@ const Layout = ({ children }) => {
                             <li className="nav-item">
                                 <a href="/diary" className="nav-link">My Diary</a>
                             </li>
+                            <li className="nav-item">
+                                <a href="/community" className="nav-link">Community</a>
+                            </li>
                         </ul>
                     </nav>
 

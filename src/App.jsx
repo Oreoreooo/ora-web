@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Auth from './components/Auth';
 // import StoryPreference from './components/StoryPreference';
 import WriteStory from './components/WriteStory';
 // import SpeakToOra from './components/SpeakToOra';
 import DiaryBrowser from './components/DiaryBrowser';
+import Community from './components/Community';
 import { isAuthenticated, checkAuthWithRedirect } from './utils/auth';
 import './App.css';
 
@@ -22,6 +23,28 @@ const ProtectedRoute = ({ children }) => {
   return shouldRender ? children : null;
 };
 
+// WriteStory 页面包装器
+const WriteStoryPage = () => {
+  const navigate = useNavigate();
+  
+  const handleReturn = () => {
+    navigate('/diary');
+  };
+
+  return <WriteStory onReturn={handleReturn} />;
+};
+
+// Community 页面包装器
+const CommunityPage = () => {
+  const navigate = useNavigate();
+  
+  const handleReturn = () => {
+    navigate('/');
+  };
+
+  return <Community onReturn={handleReturn} />;
+};
+
 // 首页组件
 const HomePage = () => {
   const handleProtectedNavigation = (path) => {
@@ -34,13 +57,16 @@ const HomePage = () => {
     <div className="homepage">
       <div className="hero-section">
         <h1>Welcome to Ora</h1>
-        <p>Create your personal memory stories</p>
+        <p>Create your personal memory stories and share with the community</p>
         <div className="hero-buttons">
           <button onClick={() => handleProtectedNavigation('/memories')} className="primary-btn">
             Start Creating Memories
           </button>
           <button onClick={() => handleProtectedNavigation('/diary')} className="secondary-btn">
             View My Diary
+          </button>
+          <button onClick={() => handleProtectedNavigation('/community')} className="secondary-btn">
+            📖 Community
           </button>
         </div>
       </div>
@@ -68,22 +94,17 @@ function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/memories" element={
             <ProtectedRoute>
-              <WriteStory />
+              <WriteStoryPage />
             </ProtectedRoute>
           } />
-          {/* <Route path="/write" element={
-            <ProtectedRoute>
-              <WriteStory />
-            </ProtectedRoute>
-          } />
-          <Route path="/speak" element={
-            <ProtectedRoute>
-              <SpeakToOra />
-            </ProtectedRoute>
-          } /> */}
           <Route path="/diary" element={
             <ProtectedRoute>
               <DiaryBrowser />
+            </ProtectedRoute>
+          } />
+          <Route path="/community" element={
+            <ProtectedRoute>
+              <CommunityPage />
             </ProtectedRoute>
           } />
           {/* 重定向未知路由到首页 */}

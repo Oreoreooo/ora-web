@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './WriteStory.css';
 import axios from 'axios';
-import { getAccessToken, handleApiError, getAuthHeaders, checkAuthWithRedirect } from '../utils/auth';
+import { getAccessToken, handleApiError, getAuthHeaders, checkAuthWithRedirect, getUserInfo } from '../utils/auth';
+import VoiceActivityDetector from '../utils/voiceActivityDetector';
 
 const WriteStory = ({ onReturn }) => {
   const [formData, setFormData] = useState({
@@ -18,16 +19,234 @@ const WriteStory = ({ onReturn }) => {
   const [conversationId, setConversationId] = useState(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [pendingContent, setPendingContent] = useState(''); // 存储待保存的内容
+  const [lastSavedTime, setLastSavedTime] = useState(null); // 记录最后保存时间
   
   // 语音相关状态
-  const [chatMode, setChatMode] = useState('text'); // 'text' or 'voice'
+  const [chatMode, setChatMode] = useState('voice'); // 'text' or 'voice' - 默认为语音模式
   const [isRecording, setIsRecording] = useState(false);
   const [micError, setMicError] = useState('');
   const [transcribedText, setTranscribedText] = useState('');
+  const [isContinuousListening, setIsContinuousListening] = useState(false);
+  const [vadState, setVadState] = useState({ isListening: false, isSpeaking: false });
   
-  // 编辑模式状态
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [editContent, setEditContent] = useState('');
+  // 语音播放相关状态
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentPlayingMessage, setCurrentPlayingMessage] = useState(null);
+  const audioRef = useRef(null);
+  
+  // VAD 实例
+  const vadRef = useRef(null);
+  
+  // 使用 ref 跟踪录制状态，避免闭包问题
+  const isRecordingRef = useRef(false);
+  const isContinuousListeningRef = useRef(false);
+
+  // 获取用户特定的草稿存储key
+  const getDraftKey = () => {
+    const userInfo = getUserInfo();
+    if (!userInfo || !userInfo.id) {
+      return null;
+    }
+    return `writeStoryDraft_user_${userInfo.id}`;
+  };
+
+  // 验证草稿是否属于当前用户
+  const validateDraft = (draft) => {
+    const userInfo = getUserInfo();
+    if (!userInfo || !userInfo.id) {
+      return false;
+    }
+    
+    // 检查草稿是否过期（可选：比如超过30天）
+    const draftAge = new Date() - new Date(draft.timestamp);
+    const maxAge = 30 * 24 * 60 * 60 * 1000; // 30天
+    
+    // 检查草稿是否有用户标识（如果有的话）
+    if (draft.userId && draft.userId !== userInfo.id) {
+      return false;
+    }
+    
+    return draftAge < maxAge;
+  };
+
+  // 从 localStorage 加载草稿
+  useEffect(() => {
+    const draftKey = getDraftKey();
+    if (!draftKey) return;
+
+    const savedDraft = localStorage.getItem(draftKey);
+    if (savedDraft) {
+      try {
+        const draft = JSON.parse(savedDraft);
+        
+        // 验证草稿有效性
+        if (!validateDraft(draft)) {
+          localStorage.removeItem(draftKey);
+          return;
+        }
+        
+        setFormData({
+          title: draft.title || '',
+          thoughts: draft.thoughts || ''
+        });
+        if (draft.chatMessages && draft.chatMessages.length > 1) {
+          setChatMessages(draft.chatMessages);
+        }
+        if (draft.pendingContent) {
+          setPendingContent(draft.pendingContent);
+        }
+        setLastSavedTime(new Date(draft.timestamp));
+      } catch (error) {
+        console.error('Error loading draft:', error);
+        // 如果草稿数据损坏，删除它
+        localStorage.removeItem(draftKey);
+      }
+    }
+  }, []);
+
+  // 初始化 VAD
+  useEffect(() => {
+    const initVAD = async () => {
+      try {
+        // 重置状态
+        setIsRecording(false);
+        isRecordingRef.current = false;
+        setIsContinuousListening(false);
+        isContinuousListeningRef.current = false;
+        
+        vadRef.current = new VoiceActivityDetector();
+        await vadRef.current.init();
+        
+        // 确保状态同步
+        isRecordingRef.current = isRecording;
+        isContinuousListeningRef.current = isContinuousListening;
+        
+        // 设置回调函数
+        vadRef.current.setSpeechStartCallback(() => {
+          console.log('🎤 语音开始检测');
+          setVadState(prev => ({ ...prev, isSpeaking: true }));
+          if (isContinuousListeningRef.current) {
+            console.log('🎤 触发开始录制, 当前录制状态ref:', isRecordingRef.current);
+            // 只有在没有录制的情况下才开始录制
+            if (!isRecordingRef.current) {
+              startRecording();
+            } else {
+              console.log('⚠️ 已经在录制中，跳过重复开始录制');
+            }
+          } else {
+            console.log('❌ 不在连续监听模式中，跳过录制');
+          }
+        });
+        
+        vadRef.current.setSpeechEndCallback(() => {
+          console.log('🔇 语音结束检测');
+          setVadState(prev => ({ ...prev, isSpeaking: false }));
+          if (isContinuousListeningRef.current) {
+            console.log('🔇 触发停止录制, 当前录制状态ref:', isRecordingRef.current);
+            // 使用 ref 检查录制状态
+            if (isRecordingRef.current) {
+              stopRecording();
+            } else {
+              console.log('❌ 录制状态ref显示未在录制中');
+            }
+          } else {
+            console.log(`❌ 跳过停止录制 - 连续监听ref: ${isContinuousListeningRef.current}`);
+          }
+        });
+        
+        console.log('VAD初始化成功');
+      } catch (error) {
+        console.error('初始化VAD失败:', error);
+        setMicError('Failed to initialize voice detection: ' + error.message);
+      }
+    };
+
+    // 只在语音模式下初始化VAD
+    if (chatMode === 'voice') {
+      initVAD();
+    }
+
+    // 清理函数
+    return () => {
+      if (vadRef.current) {
+        vadRef.current.cleanup();
+        vadRef.current = null;
+      }
+    };
+  }, [chatMode]); // 依赖于chatMode变化
+
+  // 监听连续语音模式状态变化
+  useEffect(() => {
+    // 同步 ref 与 state
+    isContinuousListeningRef.current = isContinuousListening;
+    
+    if (vadRef.current) {
+      if (isContinuousListening) {
+        // 如果还没有开始监听，则开始监听
+        if (!vadRef.current.getState().isListening) {
+          vadRef.current.startListening();
+        }
+        setVadState(prev => ({ ...prev, isListening: true }));
+      } else {
+        vadRef.current.stopListening();
+        setVadState(prev => ({ ...prev, isListening: false, isSpeaking: false }));
+      }
+    }
+  }, [isContinuousListening]);
+
+  // 自动保存草稿
+  useEffect(() => {
+    const saveDraft = () => {
+      const draftKey = getDraftKey();
+      if (!draftKey) return;
+
+      const userInfo = getUserInfo();
+      if (!userInfo || !userInfo.id) return;
+
+      const draft = {
+        userId: userInfo.id, // 添加用户ID以确保安全
+        title: formData.title,
+        thoughts: formData.thoughts,
+        pendingContent: pendingContent,
+        chatMessages: chatMessages,
+        timestamp: new Date().toISOString()
+      };
+      localStorage.setItem(draftKey, JSON.stringify(draft));
+      setLastSavedTime(new Date());
+    };
+
+    // 只有在有内容时才保存
+    if (formData.title.trim() || formData.thoughts.trim() || pendingContent.trim() || chatMessages.length > 1) {
+      const timeoutId = setTimeout(saveDraft, 2000); // 2秒后自动保存
+      return () => clearTimeout(timeoutId);
+    }
+  }, [formData.title, formData.thoughts, pendingContent, chatMessages]);
+
+  // 清除草稿
+  const clearDraft = () => {
+    const draftKey = getDraftKey();
+    if (!draftKey) return;
+    
+    localStorage.removeItem(draftKey);
+    setLastSavedTime(null);
+  };
+
+  // 手动清除草稿并重置表单
+  const clearDraftAndReset = () => {
+    if (window.confirm('Are you sure you want to clear the draft and start over? This action cannot be undone.')) {
+      clearDraft();
+      setFormData({
+        title: '',
+        thoughts: ''
+      });
+      setPendingContent('');
+      setChatMessages([
+        { role: 'system', content: 'I am an AI assistant that can help you create stories and memories.' }
+      ]);
+      setSaveStatus('Draft cleared!');
+      setTimeout(() => setSaveStatus(''), 2000);
+    }
+  };
 
   // 不再自动更新 thoughts，而是生成待保存的内容
   useEffect(() => {
@@ -73,42 +292,26 @@ const WriteStory = ({ onReturn }) => {
     });
   };
 
-  const handleExport = () => {
-    // 进入编辑模式，将待保存内容或用户输入内容设置为编辑内容
-    const contentToEdit = pendingContent || formData.thoughts;
+  const handleSave = async () => {
+    if (!checkAuthWithRedirect()) return;
     
-    if (!contentToEdit.trim()) {
+    const contentToSave = pendingContent || formData.thoughts;
+    
+    if (!contentToSave.trim()) {
       alert('Please create some content first by chatting with AI or typing in the text area.');
       return;
     }
     
-    // 提示用户进入编辑模式
-    if (window.confirm('This will take you to edit mode where you can finalize and save your story. Continue?')) {
-      setEditContent(contentToEdit);
-      setIsEditMode(true);
-    }
-  };
-
-  const handleSaveFromEdit = async () => {
-    if (!checkAuthWithRedirect()) return;
-    
-    if (!formData.title || !editContent) {
-      setSaveStatus('Please fill in title and content');
-      return;
-    }
-
-    // 添加确认对话框，确保用户真的想要保存
-    if (!window.confirm('Are you sure you want to save this story to your diary?')) {
-      return;
-    }
+    // Generate a title from the content if no title is provided
+    const title = formData.title || `Story - ${new Date().toLocaleDateString()}`;
 
     try {
-      const currentDateTime = new Date().toISOString(); // 获取当前完整日期时间
+      const currentDateTime = new Date().toISOString();
       
       const response = await axios.post('http://localhost:5000/api/conversations', {
-        title: formData.title,
-        content: editContent,
-        date: currentDateTime, // 使用当前完整时间
+        title: title,
+        content: contentToSave,
+        date: currentDateTime,
         messages: chatMessages
       }, {
         headers: getAuthHeaders()
@@ -118,18 +321,20 @@ const WriteStory = ({ onReturn }) => {
         setConversationId(response.data.id);
         setSaveStatus('Story saved successfully! Redirecting in 3 seconds...');
         
-        // 延长显示时间，让用户明确看到保存成功的消息
+        // 清除草稿
+        clearDraft();
+        
         setTimeout(() => {
-          // Clear the form and exit edit mode
           setFormData({
             title: '',
             thoughts: ''
           });
           setPendingContent('');
-          setEditContent('');
-          setIsEditMode(false);
+          setChatMessages([
+            { role: 'system', content: 'I am an AI assistant that can help you create stories and memories.' }
+          ]);
           onReturn();
-        }, 3000); // 增加到3秒，让用户有时间看到消息
+        }, 3000);
       }
     } catch (error) {
       console.error('Error saving story:', error);
@@ -156,10 +361,11 @@ const WriteStory = ({ onReturn }) => {
     setIsLoading(true);
     
     try {
-      // Call our backend API
+      // Call our backend API with voice response option
       const response = await axios.post('http://localhost:5000/api/chat', {
         messages: updatedMessages,
-        conversationId: conversationId
+        conversationId: conversationId,
+        voice_response: chatMode === 'voice' // 如果是语音模式，请求语音回复
       }, {
         headers: getAuthHeaders()
       });
@@ -167,7 +373,23 @@ const WriteStory = ({ onReturn }) => {
       // Extract the assistant's response from the API response
       const aiMessage = response.data.choices[0].message;
       
-      setChatMessages([...updatedMessages, aiMessage]);
+      // 如果有音频，添加音频路径到消息
+      if (response.data.has_audio && response.data.audio_path) {
+        aiMessage.audio_path = response.data.audio_path;
+        console.log('AI message with audio:', aiMessage); // 调试日志
+      } else {
+        console.log('No audio in response:', response.data); // 调试日志
+      }
+      
+      const newMessages = [...updatedMessages, aiMessage];
+      setChatMessages(newMessages);
+      
+      // 如果是语音模式且有音频，自动播放
+      if (chatMode === 'voice' && aiMessage.audio_path) {
+        console.log('Auto-playing audio in voice mode'); // 调试日志
+        await playAudio(aiMessage.audio_path, newMessages.length - 1);
+      }
+      
     } catch (error) {
       console.error('Error sending message to AI:', error);
       handleApiError(error);
@@ -184,61 +406,176 @@ const WriteStory = ({ onReturn }) => {
     }
   };
 
-  const handleUseAIResponse = (messageContent) => {
-    // 将AI回复添加到待保存内容中
-    setPendingContent(prev => prev ? `${prev}\n\n${messageContent}` : messageContent);
+  // 开始录制
+  const startRecording = async () => {
+    if (!checkAuthWithRedirect()) return;
+    
+    // 检查是否已经在录制中
+    if (isRecordingRef.current) {
+      console.log('⚠️ 已经在录制中，跳过重复开始请求');
+      return;
+    }
+    
+    console.log('🎤 开始录制请求...');
+    
+    try {
+      const response = await axios.post('http://localhost:5000/api/asr/start', {}, {
+        headers: getAuthHeaders()
+      });
+      
+      console.log('📡 ASR开始响应:', response.data);
+      
+      if (response.data.error) {
+        console.error('❌ ASR开始错误:', response.data.error);
+        setMicError(response.data.error);
+        
+        // 如果后端说已经在录制中，同步前端状态
+        if (response.data.error.includes('Already recording')) {
+          console.log('🔄 后端已在录制中，同步前端状态');
+          setIsRecording(true);
+          isRecordingRef.current = true;
+          setMicError(''); // 清除错误消息，因为这不是真正的错误
+        }
+      } else {
+        setIsRecording(true);
+        isRecordingRef.current = true; // 同时更新 ref
+        setTranscribedText('');
+        setMicError('');
+        console.log('✅ 开始录制成功, 状态ref:', isRecordingRef.current);
+      }
+    } catch (error) {
+      console.error('❌ Start recording error:', error);
+      handleApiError(error);
+      setMicError('Failed to start recording: ' + (error.message || 'Unknown error'));
+    }
   };
 
-  // 语音录制相关函数
+  // 停止录制
+  const stopRecording = async () => {
+    console.log('🔄 停止录制被调用，当前录制状态ref:', isRecordingRef.current, 'state:', isRecording);
+    
+    // 使用 ref 检查录制状态
+    if (!isRecordingRef.current) {
+      console.log('❌ 停止录制失败：当前不在录制状态');
+      return;
+    }
+    
+    console.log('🔄 正在停止录制...');
+    
+    // 立即设置录制状态为false，防止重复调用
+    setIsRecording(false);
+    isRecordingRef.current = false;
+    
+    try {
+      const response = await axios.post('http://localhost:5000/api/asr/stop', {}, {
+        headers: getAuthHeaders()
+      });
+      
+      console.log('📡 ASR停止响应:', response.data);
+      
+      if (response.data.error) {
+        console.error('❌ ASR停止错误:', response.data.error);
+        setMicError(response.data.error);
+        
+        // 如果是连续监听模式，即使出错也要重新开始监听
+        if (isContinuousListeningRef.current && vadRef.current) {
+          console.log('🔄 ASR出错，重新开始监听');
+          setTimeout(() => {
+            if (isContinuousListeningRef.current && vadRef.current) {
+              vadRef.current.startListening();
+            }
+          }, 1000);
+        }
+      } else if (response.data.text && response.data.text.trim()) {
+        setTranscribedText(response.data.text);
+        console.log('✅ 录制完成，转录文本:', response.data.text);
+        
+        // 将转录文本作为用户消息发送
+        await handleVoiceMessage(response.data.text);
+      } else {
+        console.log('⚠️ ASR停止成功，但没有返回转录文本，可能是录制时间太短或无有效语音');
+        setMicError('No speech detected. Please try speaking louder or longer.');
+        
+        // 如果是连续监听模式，重新开始监听
+        if (isContinuousListeningRef.current && vadRef.current) {
+          console.log('🔄 无有效语音，重新开始监听');
+          setTimeout(() => {
+            if (isContinuousListeningRef.current && vadRef.current) {
+              vadRef.current.startListening();
+              // 清除错误消息
+              setTimeout(() => setMicError(''), 2000);
+            }
+          }, 1000);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Stop recording error:', error);
+      handleApiError(error);
+      setMicError('Failed to stop recording: ' + (error.message || 'Unknown error'));
+      
+      // 即使出错，也要重新开始监听（如果在连续监听模式）
+      if (isContinuousListeningRef.current && vadRef.current) {
+        console.log('🔄 停止录制出错，重新开始监听');
+        setTimeout(() => {
+          if (isContinuousListeningRef.current && vadRef.current) {
+            vadRef.current.startListening();
+          }
+        }, 1000);
+      }
+    }
+    
+    console.log('🔄 录制流程完成');
+  };
+
+  // 语音录制相关函数 - 重构后的版本
   const handleMicrophoneRequest = async () => {
     if (!checkAuthWithRedirect()) return;
     
-    if (isRecording) {
-      // Stop recording
-      try {
-        const response = await axios.post('http://localhost:5000/api/asr/stop', {}, {
-          headers: getAuthHeaders()
-        });
-        
-        if (response.data.error) {
-          setMicError(response.data.error);
-        } else if (response.data.text) {
-          setTranscribedText(response.data.text);
-          
-          // 将转录文本作为用户消息发送
-          await handleVoiceMessage(response.data.text);
-        }
-      } catch (error) {
-        console.error('Stop recording error:', error);
-        handleApiError(error);
-        setMicError('Failed to stop recording: ' + (error.message || 'Unknown error'));
-      } finally {
-        setIsRecording(false);
+    if (isContinuousListening) {
+      // 停止连续监听模式
+      setIsContinuousListening(false);
+      isContinuousListeningRef.current = false; // 更新 ref
+      
+      // 如果正在录制，先停止录制
+      if (isRecordingRef.current) {
+        console.log('🔄 停止连续监听时正在录制，先停止录制');
+        await stopRecording();
       }
+      
+      setIsRecording(false);
+      isRecordingRef.current = false; // 重置 ref
+      console.log('停止连续语音模式');
     } else {
-      // Start recording
-      try {
-        const response = await axios.post('http://localhost:5000/api/asr/start', {}, {
-          headers: getAuthHeaders()
-        });
-        
-        if (response.data.error) {
-          setMicError(response.data.error);
-        } else {
-          setIsRecording(true);
-          setTranscribedText('');
-          setMicError('');
-        }
-      } catch (error) {
-        console.error('Start recording error:', error);
-        handleApiError(error);
-        setMicError('Failed to start recording: ' + (error.message || 'Unknown error'));
+      // 开始连续监听模式
+      if (!vadRef.current) {
+        setMicError('Voice detection not initialized. Please try again.');
+        return;
       }
+      
+      setIsContinuousListening(true);
+      isContinuousListeningRef.current = true; // 更新 ref
+      setMicError('');
+      console.log('开始连续语音模式');
     }
   };
 
   const handleVoiceMessage = async (transcribedText) => {
-    if (!transcribedText.trim()) return;
+    if (!transcribedText || !transcribedText.trim()) {
+      console.log('❌ 转录文本为空或无效，跳过处理');
+      
+      // 如果是连续监听模式，重新开始监听
+      if (isContinuousListeningRef.current && vadRef.current) {
+        console.log('🔄 转录文本无效，重新开始监听');
+        setTimeout(() => {
+          if (isContinuousListeningRef.current && vadRef.current) {
+            vadRef.current.startListening();
+          }
+        }, 500);
+      }
+      return;
+    }
+    
+    console.log('🗣️ 处理语音消息:', transcribedText);
     
     // Add user message to chat
     const userMessage = { role: 'user', content: transcribedText };
@@ -247,20 +584,50 @@ const WriteStory = ({ onReturn }) => {
     setIsLoading(true);
     
     try {
-      // Call our backend API
+      console.log('📡 发送消息给AI...');
+      // Call our backend API with voice response
       const response = await axios.post('http://localhost:5000/api/chat', {
         messages: updatedMessages,
-        conversationId: conversationId
+        conversationId: conversationId,
+        voice_response: true // 语音模式始终请求语音回复
       }, {
         headers: getAuthHeaders()
       });
       
+      console.log('✅ AI响应:', response.data);
+      
       // Extract the assistant's response from the API response
       const aiMessage = response.data.choices[0].message;
       
-      setChatMessages([...updatedMessages, aiMessage]);
+      // 如果有音频，添加音频路径到消息
+      if (response.data.has_audio && response.data.audio_path) {
+        aiMessage.audio_path = response.data.audio_path;
+        console.log('🔊 Voice message AI response with audio:', aiMessage); // 调试日志
+      } else {
+        console.log('⚠️ No audio in voice response:', response.data); // 调试日志
+      }
+      
+      const newMessages = [...updatedMessages, aiMessage];
+      setChatMessages(newMessages);
+      
+      // 自动播放AI回复的语音
+      if (aiMessage.audio_path) {
+        console.log('🔊 Auto-playing voice response audio'); // 调试日志
+        await playAudio(aiMessage.audio_path, newMessages.length - 1);
+      } else {
+        // 如果没有音频，直接重新开始监听
+        if (isContinuousListening && vadRef.current) {
+          console.log('🔄 AI回复完成（无音频），重新开始监听');
+          setTimeout(() => {
+            if (isContinuousListening && vadRef.current) {
+              vadRef.current.startListening();
+            }
+          }, 500);
+        }
+      }
+      
     } catch (error) {
-      console.error('Error sending voice message to AI:', error);
+      console.error('❌ Error sending voice message to AI:', error);
       handleApiError(error);
       // Add error message to chat
       setChatMessages([
@@ -270,19 +637,126 @@ const WriteStory = ({ onReturn }) => {
           content: `Sorry, there was an error processing your voice message: ${error.response?.data?.error || error.message}. Please try again.` 
         }
       ]);
+      
+      // 即使出错也要重新开始监听
+      if (isContinuousListening && vadRef.current) {
+        console.log('🔄 处理语音消息出错，重新开始监听');
+        setTimeout(() => {
+          if (isContinuousListening && vadRef.current) {
+            vadRef.current.startListening();
+          }
+        }, 1000);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
+  // 音频播放相关函数
+  const playAudio = async (audioPath, messageIndex) => {
+    try {
+      console.log('Playing audio:', audioPath); // 调试日志
+      
+      // 停止当前播放的音频
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      
+      setCurrentPlayingMessage(messageIndex);
+      setIsPlaying(true);
+      
+      // 创建带认证的音频URL
+      const token = getAccessToken();
+      const audioUrl = `http://localhost:5000/api/audio/${encodeURIComponent(audioPath)}?token=${token}`;
+      console.log('Audio URL:', audioUrl); // 调试日志
+      
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+      
+      // 添加事件监听器
+      audio.onended = () => {
+        setIsPlaying(false);
+        setCurrentPlayingMessage(null);
+        audioRef.current = null;
+        
+        // 在连续语音模式下，音频播放完成后重新开始监听
+        if (isContinuousListening && vadRef.current) {
+          console.log('音频播放完成，重新开始监听');
+          setTimeout(() => {
+            if (isContinuousListening && vadRef.current) {
+              vadRef.current.startListening();
+            }
+          }, 500);
+        }
+      };
+      
+      audio.onerror = (error) => {
+        console.error('Audio playback error:', error);
+        setIsPlaying(false);
+        setCurrentPlayingMessage(null);
+        audioRef.current = null;
+        
+        // 即使出错也要重新开始监听
+        if (isContinuousListening && vadRef.current) {
+          console.log('音频播放出错，重新开始监听');
+          setTimeout(() => {
+            if (isContinuousListening && vadRef.current) {
+              vadRef.current.startListening();
+            }
+          }, 500);
+        }
+      };
+      
+      // 播放音频
+      await audio.play();
+      
+    } catch (error) {
+      console.error('Error playing audio:', error);
+      setIsPlaying(false);
+      setCurrentPlayingMessage(null);
+      
+      // 即使出错也要重新开始监听
+      if (isContinuousListening && vadRef.current) {
+        console.log('音频播放异常，重新开始监听');
+        setTimeout(() => {
+          if (isContinuousListening && vadRef.current) {
+            vadRef.current.startListening();
+          }
+        }, 500);
+      }
+    }
+  };
+
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setIsPlaying(false);
+    setCurrentPlayingMessage(null);
+  };
+
   return (
     <div className="desktop-frame">
-      {!isEditMode ? (
-        <div className="story-container">
+      <div className="story-container">
           
           
           <div className="form-and-chat">
             <div className="story-form">
+              <div className="form-group">
+                <div className="input-container">
+                  <input 
+                    type="text" 
+                    name="title" 
+                    value={formData.title} 
+                    onChange={handleChange}
+                    placeholder="Set a Title"
+                    className="form-input"
+                  />
+                </div>
+              </div>
+              
               <div className="form-group">
                 <div className="input-container">
                   <textarea 
@@ -313,12 +787,39 @@ const WriteStory = ({ onReturn }) => {
                 <button 
                   type="button" 
                   className="action-button"
-                  onClick={handleExport}
+                  onClick={handleSave}
                   disabled={!pendingContent && !formData.thoughts}
                 >
-                  Export
+                  Save
                 </button>
+                {lastSavedTime && (
+                  <button 
+                    type="button" 
+                    className="action-button secondary"
+                    onClick={clearDraftAndReset}
+                    title="Clear draft and start over"
+                  >
+                    Clear Draft
+                  </button>
+                )}
               </div>
+              
+              {/* 草稿状态显示 */}
+              {lastSavedTime && (
+                <div className="draft-status">
+                  <span className="draft-indicator">
+                    📝 Draft auto-saved at {lastSavedTime.toLocaleTimeString()}
+                    <br />
+                    <small style={{ opacity: 0.7 }}>Your draft will be preserved when you log out</small>
+                  </span>
+                </div>
+              )}
+              
+              {saveStatus && (
+                <div className={`save-status ${saveStatus.includes('Error') ? 'error' : 'success'}`}>
+                  {saveStatus}
+                </div>
+              )}
             </div>
             
             <div className="chat-container">
@@ -345,13 +846,21 @@ const WriteStory = ({ onReturn }) => {
                   <div key={index} className={`chat-message ${message.role}`}>
                     <div className="message-content">
                       {message.content}
-                      {message.role === 'assistant' && (
-                        <button 
-                          className="use-response-button"
-                          onClick={() => handleUseAIResponse(message.content)}
-                        >
-                          Use in Story
-                        </button>
+                      {message.role === 'assistant' && message.audio_path && (
+                        <div className="message-actions">
+                          <button 
+                            className={`audio-button ${currentPlayingMessage === index ? 'playing' : ''}`}
+                            onClick={() => {
+                              if (currentPlayingMessage === index && isPlaying) {
+                                stopAudio();
+                              } else {
+                                playAudio(message.audio_path, index);
+                              }
+                            }}
+                          >
+                            {currentPlayingMessage === index && isPlaying ? '⏹️' : '🔊'}
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -384,88 +893,43 @@ const WriteStory = ({ onReturn }) => {
                 </form>
               ) : (
                 <div className="voice-controls">
-                  <button 
-                    className={`voice-button ${isRecording ? 'recording' : ''}`} 
-                    onClick={handleMicrophoneRequest}
-                    disabled={isLoading}
-                  >
-                    {isRecording ? (
-                      <>
-                        <span className="recording-indicator"></span>
-                        Stop Recording
-                      </>
-                    ) : (
-                      <>
-                        Speak
-                      </>
+                  <div className="voice-status">
+                    {micError && (
+                      <div className="error-message">{micError}</div>
                     )}
-                  </button>
+                    {isContinuousListening && (
+                      <div className="listening-status">
+                        <span className="status-indicator">
+                          {vadState.isSpeaking ? '🔴 Speaking...' : '🎤 Listening...'}
+                        </span>
+                        {isRecording && <span className="recording-pulse">●</span>}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="voice-buttons">
+                    <button 
+                      className={`voice-button ${isContinuousListening ? 'listening' : ''}`} 
+                      onClick={handleMicrophoneRequest}
+                      disabled={isLoading}
+                    >
+                      {isContinuousListening ? (
+                        <>
+                          <span className="recording-indicator"></span>
+                          Stop Voice Chat
+                        </>
+                      ) : (
+                        <>
+                          🎤 Start Voice Chat
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
           </div>
         </div>
-      ) : (
-        <div className="story-container">
-          <div className="story-header">
-            <h2 className="story-title">Edit Story</h2>
-          </div>
-          
-          <div className="edit-form">
-            <div className="save-warning">
-              ⚠️ <strong>Note:</strong> Clicking "Save" will permanently add this story to your diary.
-            </div>
-            
-            <div className="form-group">
-              <div className="input-container">
-                <input 
-                  type="text" 
-                  name="title" 
-                  value={formData.title} 
-                  onChange={handleChange}
-                  placeholder="Set a Title"
-                  className="form-input"
-                />
-              </div>
-            </div>
-            
-            <div className="form-group">
-              <div className="input-container">
-                <textarea 
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  placeholder="Edit your content here..."
-                  className="form-textarea"
-                  rows={15}
-                />
-              </div>
-            </div>
-            
-            <div className="buttons-container">
-              <button 
-                type="button" 
-                className="action-button secondary"
-                onClick={() => setIsEditMode(false)}
-              >
-                Back
-              </button>
-              <button 
-                type="button" 
-                className="action-button"
-                onClick={handleSaveFromEdit}
-              >
-                Save
-              </button>
-            </div>
-            
-            {saveStatus && (
-              <div className={`save-status ${saveStatus.includes('Error') ? 'error' : 'success'}`}>
-                {saveStatus}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

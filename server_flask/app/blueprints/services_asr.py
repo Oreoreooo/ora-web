@@ -5,6 +5,15 @@ import threading
 import queue
 import time
 from io import BytesIO
+import os
+import warnings
+
+# 配置环境变量以减少警告
+os.environ["MODELSCOPE_DISABLE_WARNINGS"] = "1"
+os.environ["FUNASR_DISABLE_UPDATE"] = "1"
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+
 from funasr import AutoModel
 from funasr.utils.postprocess_utils import rich_transcription_postprocess
 from ..config import Config
@@ -22,16 +31,49 @@ class ASRService:
 
     def _initialize(self):
         try:
-            # Initialize the ASR model
-            self.model = AutoModel(
-                model="iic/SenseVoiceSmall",
-                trust_remote_code=True,
-                remote_code="./model.py",
-                vad_model="fsmn-vad",
-                vad_kwargs={"max_single_segment_time": 30000},
-                device="cuda:0" if Config.USE_CUDA else "cpu",
-                disable_update=True  # 禁用自动更新检查
-            )
+            # 使用本地模型路径
+            import os
+            model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models", "SenseVoiceSmall")
+            
+            print(f"Loading ASR model from: {model_path}")
+            
+            # 首先尝试不使用remote_code
+            try:
+                # Initialize the ASR model without remote code
+                self.model = AutoModel(
+                    model=model_path,
+                    vad_model="fsmn-vad",
+                    vad_kwargs={"max_single_segment_time": 30000},
+                    device="cuda:0" if Config.USE_CUDA else "cpu",
+                    disable_update=True,
+                    trust_remote_code=False  # 不信任远程代码
+                )
+                print("✅ Model loaded without remote code")
+            except Exception as e1:
+                print(f"⚠️ Failed to load without remote code: {e1}")
+                try:
+                    # 如果失败，尝试使用本地model.py
+                    self.model = AutoModel(
+                        model=model_path,
+                        trust_remote_code=True,
+                        vad_model="fsmn-vad",
+                        vad_kwargs={"max_single_segment_time": 30000},
+                        device="cuda:0" if Config.USE_CUDA else "cpu",
+                        disable_update=True
+                    )
+                    print("✅ Model loaded with local model.py")
+                except Exception as e2:
+                    print(f"⚠️ Failed with local model.py: {e2}")
+                    # 最后尝试使用在线模型
+                    self.model = AutoModel(
+                        model="iic/SenseVoiceSmall",
+                        trust_remote_code=True,
+                        vad_model="fsmn-vad",
+                        vad_kwargs={"max_single_segment_time": 30000},
+                        device="cuda:0" if Config.USE_CUDA else "cpu",
+                        disable_update=True
+                    )
+                    print("✅ Model loaded from online repository")
             
             # Audio parameters
             self.CHUNK = 1024
