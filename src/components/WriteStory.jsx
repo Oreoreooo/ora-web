@@ -1,10 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import './WriteStory.css';
 import axios from 'axios';
 import { getAccessToken, handleApiError, getAuthHeaders, checkAuthWithRedirect, getUserInfo } from '../utils/auth';
 import VoiceActivityDetector from '../utils/voiceActivityDetector';
 
 const WriteStory = ({ onReturn }) => {
+  // 保存初始diary内容用于对比
+  const initialDiary = useRef({
+    title: '',
+    thoughts: '',
+    messages: []
+  });
+  const location = useLocation();
   const [formData, setFormData] = useState({
     title: '',
     thoughts: ''
@@ -20,6 +28,7 @@ const WriteStory = ({ onReturn }) => {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [pendingContent, setPendingContent] = useState(''); // 存储待保存的内容
   const [lastSavedTime, setLastSavedTime] = useState(null); // 记录最后保存时间
+  const lastSavedTimeRef = useRef(null);
   
   // 语音相关状态
   const [chatMode, setChatMode] = useState('voice'); // 'text' or 'voice' - 默认为语音模式
@@ -69,40 +78,88 @@ const WriteStory = ({ onReturn }) => {
     return draftAge < maxAge;
   };
 
-  // 从 localStorage 加载草稿
+  // 从 localStorage 加载草稿或导航传参
   useEffect(() => {
     const draftKey = getDraftKey();
-    if (!draftKey) return;
-
-    const savedDraft = localStorage.getItem(draftKey);
-    if (savedDraft) {
-      try {
-        const draft = JSON.parse(savedDraft);
-        
-        // 验证草稿有效性
-        if (!validateDraft(draft)) {
+    let loadedFromDraft = false;
+    if (draftKey) {
+      const savedDraft = localStorage.getItem(draftKey);
+      if (savedDraft) {
+        try {
+          const draft = JSON.parse(savedDraft);
+          // 验证草稿有效性
+          if (!validateDraft(draft)) {
+            localStorage.removeItem(draftKey);
+          } else {
+            setFormData({
+              title: draft.title || '',
+              thoughts: draft.thoughts || ''
+            });
+            if (draft.chatMessages && draft.chatMessages.length > 1) {
+              setChatMessages(draft.chatMessages);
+            }
+            if (draft.pendingContent) {
+              setPendingContent(draft.pendingContent);
+            }
+            setLastSavedTime(new Date(draft.timestamp));
+            loadedFromDraft = true;
+            // 记录初始内容为草稿内容
+            initialDiary.current = {
+              title: draft.title || '',
+              thoughts: draft.thoughts || '',
+              messages: draft.chatMessages || []
+            };
+          }
+        } catch (error) {
+          console.error('Error loading draft:', error);
+          // 如果草稿数据损坏，删除它
           localStorage.removeItem(draftKey);
-          return;
         }
-        
-        setFormData({
-          title: draft.title || '',
-          thoughts: draft.thoughts || ''
-        });
-        if (draft.chatMessages && draft.chatMessages.length > 1) {
-          setChatMessages(draft.chatMessages);
-        }
-        if (draft.pendingContent) {
-          setPendingContent(draft.pendingContent);
-        }
-        setLastSavedTime(new Date(draft.timestamp));
-      } catch (error) {
-        console.error('Error loading draft:', error);
-        // 如果草稿数据损坏，删除它
-        localStorage.removeItem(draftKey);
       }
     }
-  }, []);
+    // 如果没有加载草稿，且有location.state，则用导航参数初始化
+    if (!loadedFromDraft && location.state) {
+      const { title, content, messages } = location.state;
+      setFormData({
+        title: title || '',
+        thoughts: content || ''
+      });
+      setPendingContent('');
+      if (messages && messages.length > 0) {
+        setChatMessages([
+          { role: 'system', content: 'I am an AI assistant that can help you create stories and memories.' },
+          ...messages.filter(m => m.role !== 'system')
+        ]);
+      } else {
+        setChatMessages([
+          { role: 'system', content: 'I am an AI assistant that can help you create stories and memories.' }
+        ]);
+      }
+      // 记录初始内容为导航内容
+      initialDiary.current = {
+        title: title || '',
+        thoughts: content || '',
+        messages: messages || []
+      };
+    }
+  }, [location.state]);
+
+  // 检查用户是否有修改
+  const hasUserEdited = () => {
+    // 比较 title, thoughts, chatMessages（不含 system）
+    const orig = initialDiary.current;
+    if (!orig) return false;
+    if (formData.title !== (orig.title || '')) return true;
+    if ((pendingContent || formData.thoughts) !== (orig.thoughts || '')) return true;
+    // 比较消息内容
+    const origMsgs = (orig.messages || []).filter(m => m.role !== 'system');
+    const curMsgs = (chatMessages || []).filter(m => m.role !== 'system');
+    if (origMsgs.length !== curMsgs.length) return true;
+    for (let i = 0; i < origMsgs.length; i++) {
+      if (origMsgs[i].role !== curMsgs[i].role || origMsgs[i].content !== curMsgs[i].content) return true;
+    }
+    return false;
+  };
 
   // 初始化 VAD
   useEffect(() => {
@@ -194,31 +251,43 @@ const WriteStory = ({ onReturn }) => {
     }
   }, [isContinuousListening]);
 
-  // 自动保存草稿
+  // 自动保存草稿（仅有修改时）
   useEffect(() => {
     const saveDraft = () => {
       const draftKey = getDraftKey();
       if (!draftKey) return;
-
       const userInfo = getUserInfo();
       if (!userInfo || !userInfo.id) return;
-
+      // 只有有修改才保存
+      if (!hasUserEdited()) {
+        localStorage.removeItem(draftKey);
+        setLastSavedTime(null);
+        lastSavedTimeRef.current = null;
+        return;
+      }
+      const now = new Date();
       const draft = {
-        userId: userInfo.id, // 添加用户ID以确保安全
+        userId: userInfo.id,
         title: formData.title,
         thoughts: formData.thoughts,
         pendingContent: pendingContent,
         chatMessages: chatMessages,
-        timestamp: new Date().toISOString()
+        timestamp: now.toISOString()
       };
       localStorage.setItem(draftKey, JSON.stringify(draft));
-      setLastSavedTime(new Date());
+      setLastSavedTime(now);
+      lastSavedTimeRef.current = now;
     };
-
-    // 只有在有内容时才保存
-    if (formData.title.trim() || formData.thoughts.trim() || pendingContent.trim() || chatMessages.length > 1) {
-      const timeoutId = setTimeout(saveDraft, 2000); // 2秒后自动保存
+    // 只有在有内容且有修改时才保存
+    if ((formData.title.trim() || formData.thoughts.trim() || pendingContent.trim() || chatMessages.length > 1) && hasUserEdited()) {
+      const timeoutId = setTimeout(saveDraft, 2000);
       return () => clearTimeout(timeoutId);
+    } else {
+      // 没有修改时清除草稿
+      const draftKey = getDraftKey();
+      if (draftKey) localStorage.removeItem(draftKey);
+      setLastSavedTime(null);
+      lastSavedTimeRef.current = null;
     }
   }, [formData.title, formData.thoughts, pendingContent, chatMessages]);
 
@@ -233,12 +302,20 @@ const WriteStory = ({ onReturn }) => {
 
   // 手动清除草稿并重置表单
   const clearDraftAndReset = () => {
-    if (window.confirm('Are you sure you want to clear the draft and start over? This action cannot be undone.')) {
+    if (!hasUserEdited()) {
       clearDraft();
-      setFormData({
-        title: '',
-        thoughts: ''
-      });
+      setFormData({ title: '', thoughts: '' });
+      setPendingContent('');
+      setChatMessages([
+        { role: 'system', content: 'I am an AI assistant that can help you create stories and memories.' }
+      ]);
+      setSaveStatus('Draft cleared!');
+      setTimeout(() => setSaveStatus(''), 2000);
+      return;
+    }
+    if (window.confirm('You have unsaved changes. Are you sure you want to clear the draft and start over? This action cannot be undone.')) {
+      clearDraft();
+      setFormData({ title: '', thoughts: '' });
       setPendingContent('');
       setChatMessages([
         { role: 'system', content: 'I am an AI assistant that can help you create stories and memories.' }
@@ -290,6 +367,16 @@ const WriteStory = ({ onReturn }) => {
       ...formData,
       [name]: value
     });
+  };
+
+  // 包装onReturn，离开前检测是否有未保存内容
+  const handleReturn = () => {
+    if (hasUserEdited()) {
+      if (!window.confirm('You have unsaved changes. Are you sure you want to leave without saving?')) {
+        return;
+      }
+    }
+    onReturn();
   };
 
   const handleSave = async () => {
@@ -740,8 +827,8 @@ const WriteStory = ({ onReturn }) => {
   return (
     <div className="desktop-frame">
       <div className="story-container">
-          
-          
+          {/* 离开按钮示例：可根据实际UI放置 */}
+          {/* <button onClick={handleReturn}>Back</button> */}
           <div className="form-and-chat">
             <div className="story-form">
               <div className="form-group">
@@ -808,7 +895,7 @@ const WriteStory = ({ onReturn }) => {
               {lastSavedTime && (
                 <div className="draft-status">
                   <span className="draft-indicator">
-                    📝 Draft auto-saved at {lastSavedTime.toLocaleTimeString()}
+                    📝 Draft auto-saved at {(lastSavedTimeRef.current || lastSavedTime).toLocaleTimeString()}
                     <br />
                     <small style={{ opacity: 0.7 }}>Your draft will be preserved when you log out</small>
                   </span>
@@ -891,40 +978,24 @@ const WriteStory = ({ onReturn }) => {
                     Send
                   </button>
                 </form>
-              ) : (
-                <div className="voice-controls">
-                  <div className="voice-status">
-                    {micError && (
-                      <div className="error-message">{micError}</div>
+              ) : ( 
+                <div className="voice-buttons">
+                  <button 
+                    className={`voice-button ${isContinuousListening ? 'listening' : ''}`} 
+                    onClick={handleMicrophoneRequest}
+                    disabled={isLoading}
+                  >
+                    {isContinuousListening ? (
+                      <>
+                        <span className="recording-indicator"></span>
+                        Stop Voice Chat
+                      </>
+                    ) : (
+                      <>
+                        🎤 Start Voice Chat
+                      </>
                     )}
-                    {isContinuousListening && (
-                      <div className="listening-status">
-                        <span className="status-indicator">
-                          {vadState.isSpeaking ? '🔴 Speaking...' : '🎤 Listening...'}
-                        </span>
-                        {isRecording && <span className="recording-pulse">●</span>}
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="voice-buttons">
-                    <button 
-                      className={`voice-button ${isContinuousListening ? 'listening' : ''}`} 
-                      onClick={handleMicrophoneRequest}
-                      disabled={isLoading}
-                    >
-                      {isContinuousListening ? (
-                        <>
-                          <span className="recording-indicator"></span>
-                          Stop Voice Chat
-                        </>
-                      ) : (
-                        <>
-                          🎤 Start Voice Chat
-                        </>
-                      )}
-                    </button>
-                  </div>
+                  </button>
                 </div>
               )}
             </div>

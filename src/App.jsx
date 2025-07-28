@@ -58,17 +58,6 @@ const HomePage = () => {
       <div className="hero-section">
         <h1>Welcome to Ora</h1>
         <p>Create your personal memory stories and share with the community</p>
-        <div className="hero-buttons">
-          <button onClick={() => handleProtectedNavigation('/memories')} className="primary-btn">
-            Start Creating Memories
-          </button>
-          <button onClick={() => handleProtectedNavigation('/diary')} className="secondary-btn">
-            View My Diary
-          </button>
-          <button onClick={() => handleProtectedNavigation('/community')} className="secondary-btn">
-            📖 Community
-          </button>
-        </div>
       </div>
     </div>
   );
