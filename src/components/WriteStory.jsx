@@ -33,10 +33,10 @@ const WriteStory = ({ onReturn }) => {
   // 语音相关状态
   const [chatMode, setChatMode] = useState('voice'); // 'text' or 'voice' - 默认为语音模式
   const [isRecording, setIsRecording] = useState(false);
-  const [micError, setMicError] = useState('');
-  const [transcribedText, setTranscribedText] = useState('');
+  // const [micError, setMicError] = useState('');
+  // const [transcribedText, setTranscribedText] = useState('');
   const [isContinuousListening, setIsContinuousListening] = useState(false);
-  const [vadState, setVadState] = useState({ isListening: false, isSpeaking: false });
+  // const [vadState, setVadState] = useState({ isListening: false, isSpeaking: false });
   
   // 语音播放相关状态
   const [isPlaying, setIsPlaying] = useState(false);
@@ -289,7 +289,7 @@ const WriteStory = ({ onReturn }) => {
       setLastSavedTime(null);
       lastSavedTimeRef.current = null;
     }
-  }, [formData.title, formData.thoughts, pendingContent, chatMessages]);
+  }, [formData.title, formData.thoughts, pendingContent, chatMessages, hasUserEdited]);
 
   // 清除草稿
   const clearDraft = () => {
@@ -331,11 +331,10 @@ const WriteStory = ({ onReturn }) => {
       .filter(msg => msg.role === 'user')
       .map(msg => msg.content)
       .join('\n\n');
-    
     if (userMessages) {
       generatePendingContent(userMessages);
     }
-  }, [chatMessages]);
+  }, [chatMessages, generatePendingContent]);
 
   const generatePendingContent = async (newContent) => {
     if (!checkAuthWithRedirect()) return;
@@ -367,16 +366,6 @@ const WriteStory = ({ onReturn }) => {
       ...formData,
       [name]: value
     });
-  };
-
-  // 包装onReturn，离开前检测是否有未保存内容
-  const handleReturn = () => {
-    if (hasUserEdited()) {
-      if (!window.confirm('You have unsaved changes. Are you sure you want to leave without saving?')) {
-        return;
-      }
-    }
-    onReturn();
   };
 
   const handleSave = async () => {
