@@ -145,21 +145,40 @@ const WriteStory = ({ onReturn }) => {
   }, [location.state]);
 
   // 检查用户是否有修改
-  const hasUserEdited = () => {
-    // 比较 title, thoughts, chatMessages（不含 system）
+  const hasUserEdited = useCallback(() => {
     const orig = initialDiary.current;
     if (!orig) return false;
     if (formData.title !== (orig.title || '')) return true;
     if ((pendingContent || formData.thoughts) !== (orig.thoughts || '')) return true;
-    // 比较消息内容
     const origMsgs = (orig.messages || []).filter(m => m.role !== 'system');
     const curMsgs = (chatMessages || []).filter(m => m.role !== 'system');
     if (origMsgs.length !== curMsgs.length) return true;
     for (let i = 0; i < origMsgs.length; i++) {
       if (origMsgs[i].role !== curMsgs[i].role || origMsgs[i].content !== curMsgs[i].content) return true;
     }
+    
     return false;
-  };
+  }, [formData.title, formData.thoughts, pendingContent, chatMessages]);
+
+  const generatePendingContent = useCallback(async (newContent) => {
+    if (!checkAuthWithRedirect()) return;
+    setIsRegenerating(true);
+    try {
+      const response = await axios.post('http://localhost:5000/api/regenerate-text', {
+        text: newContent,
+        currentContent: formData.thoughts
+      }, {
+        headers: getAuthHeaders()
+      });
+      setPendingContent(response.data.regenerated_text);
+    } catch (error) {
+      console.error('Error regenerating text:', error);
+      handleApiError(error);
+      setPendingContent(newContent);
+    } finally {
+      setIsRegenerating(false);
+    }
+  }, [formData.thoughts]);
 
   // 初始化 VAD
   useEffect(() => {
@@ -336,29 +355,7 @@ const WriteStory = ({ onReturn }) => {
     }
   }, [chatMessages, generatePendingContent]);
 
-  const generatePendingContent = async (newContent) => {
-    if (!checkAuthWithRedirect()) return;
-    
-    setIsRegenerating(true);
-    try {
-      const response = await axios.post('http://localhost:5000/api/regenerate-text', {
-        text: newContent,
-        currentContent: formData.thoughts
-      }, {
-        headers: getAuthHeaders()
-      });
-
-      // 只更新待保存内容，不直接更新 formData
-      setPendingContent(response.data.regenerated_text);
-    } catch (error) {
-      console.error('Error regenerating text:', error);
-      handleApiError(error);
-      // 如果生成失败，使用原始内容
-      setPendingContent(newContent);
-    } finally {
-      setIsRegenerating(false);
-    }
-  };
+  // (duplicate generatePendingContent removed)
 
   const handleChange = (e) => {
     const { name, value } = e.target;

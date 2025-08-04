@@ -2,10 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './DiaryBrowser.css';
 import axios from 'axios';
-import { getAccessToken, handleApiError, getAuthHeaders, checkAuthWithRedirect } from '../utils/auth';
+import { handleApiError, getAuthHeaders, checkAuthWithRedirect } from '../utils/auth';
 import { exportDiaryToPDF, exportMultipleDiariesToPDF } from '../utils/pdfExport';
-import Modal from 'react-modal';
-import VoiceActivityDetector from '../utils/voiceActivityDetector';
 
 const DiaryBrowser = () => {
   const [diaries, setDiaries] = useState([]);
@@ -24,13 +22,12 @@ const DiaryBrowser = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingDiary, setEditingDiary] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [isSharing, setIsSharing] = useState(false);
   const [sharingId, setSharingId] = useState(null);
-  const [showAIDialog, setShowAIDialog] = useState(false);
+  const [setShowAIDialog] = useState(false);
   const dateFilterRef = useRef(null);
   const hideTimeoutRef = useRef(null);
   // AI对话相关状态
-  const [aiChatMode, setAiChatMode] = useState('voice'); // 'text' or 'voice'
+  const [aiChatMode] = useState('voice'); // 'text' or 'voice'
   const navigate = useNavigate();
 
   // Load conversations on component mount

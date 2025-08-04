@@ -7,7 +7,7 @@ import WriteStory from './components/WriteStory';
 // import SpeakToOra from './components/SpeakToOra';
 import DiaryBrowser from './components/DiaryBrowser';
 import Community from './components/Community';
-import { isAuthenticated, checkAuthWithRedirect } from './utils/auth';
+import { checkAuthWithRedirect } from './utils/auth';
 import './App.css';
 
 // 受保护的路由组件
@@ -47,12 +47,6 @@ const CommunityPage = () => {
 
 // 首页组件
 const HomePage = () => {
-  const handleProtectedNavigation = (path) => {
-    if (checkAuthWithRedirect()) {
-      window.location.href = path;
-    }
-  };
-
   return (
     <div className="homepage">
       <div className="hero-section">

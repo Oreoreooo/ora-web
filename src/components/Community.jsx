@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './Community.css';
 import axios from 'axios';
-import { getAccessToken, handleApiError, getAuthHeaders, checkAuthWithRedirect, getUserInfo } from '../utils/auth';
+import { handleApiError, getAuthHeaders, checkAuthWithRedirect, getUserInfo } from '../utils/auth';
 
 const Community = ({ onReturn }) => {
   const [posts, setPosts] = useState([]);
@@ -16,7 +16,7 @@ const Community = ({ onReturn }) => {
   const [showNewPostForm, setShowNewPostForm] = useState(false);
   const [userDiaries, setUserDiaries] = useState([]);
   const [showDiarySelector, setShowDiarySelector] = useState(false);
-  const [selectedDiary, setSelectedDiary] = useState(null);
+  const [setSelectedDiary] = useState(null);
 
   // 获取社区帖子
   const fetchCommunityPosts = async () => {
