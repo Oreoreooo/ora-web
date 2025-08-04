@@ -33,10 +33,10 @@ const WriteStory = ({ onReturn }) => {
   // 语音相关状态
   const [chatMode, setChatMode] = useState('voice'); // 'text' or 'voice' - 默认为语音模式
   const [isRecording, setIsRecording] = useState(false);
-  // const [micError, setMicError] = useState('');
-  // const [transcribedText, setTranscribedText] = useState('');
+  const [setMicError] = useState('');
+  const [setTranscribedText] = useState('');
   const [isContinuousListening, setIsContinuousListening] = useState(false);
-  // const [vadState, setVadState] = useState({ isListening: false, isSpeaking: false });
+  const [setVadState] = useState({ isListening: false, isSpeaking: false });
   
   // 语音播放相关状态
   const [isPlaying, setIsPlaying] = useState(false);
